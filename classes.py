@@ -14,6 +14,7 @@ import pandas as pd
 import time
 import calendar
 import yagmail
+import datetime
 
 
 class testCase(object):
@@ -68,10 +69,10 @@ class testCase(object):
 		options.add_experimental_option("detach", True) # keep window open after the method is done	
 		if self.headless==True:
 			options.add_argument("--headless")
-		if self.headless==True:
+		if self.incognito==True:
 			options.add_argument("--incognito")		
 
-		driver = webdriver.Chrome(self.driver_path, options=options)
+		driver = webdriver.Chrome(options=options)
 		driver.get(self.url)
 
 		# wait maximum 10 seconds for elements
@@ -110,7 +111,7 @@ class testCase(object):
 			continue_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="booking-licence"]/div/form/div/div[4]/button')))
 			continue_btn.click()
 		
-		open_timeslots = pd.DataFrame(columns=['Location', 'Day', 'Month', 'Time'])
+		open_timeslots_data = []
 
 		# select 1 location
 		for location in self.location:
@@ -122,7 +123,7 @@ class testCase(object):
 			location_btn.click()
 			print("location clicked")
 
-			continue_btn2 = driver.find_element_by_xpath('//*[@id="booking-location"]/div/div/form/div[2]/div[2]/button')
+			continue_btn2 = driver.find_element(By.XPATH, '//*[@id="booking-location"]/div/div/form/div[2]/div[2]/button')
 			driver.execute_script("arguments[0].scrollIntoView();", continue_btn2)			
 			time.sleep(1)
 			# clicking continue is only needed for the first location
@@ -131,6 +132,7 @@ class testCase(object):
 				print("continue_btn2 clicked")
 			time.sleep(2)		
 
+			year = datetime.datetime.now().year
 			for month in self.months:
 				# for desired dates, look into availability and save date and time
 				datetime_object = datetime.datetime.strptime(month, "%b")
@@ -149,20 +151,20 @@ class testCase(object):
 						continue_btn3.click()
 						# select available dates
 						time.sleep(3)
-						time_btns = driver.find_elements_by_xpath('//label[starts-with(@id,"btn")]')
+						time_btns = driver.find_elements(By.XPATH, '//label[starts-with(@id,"btn")]')
 						for time_btn in time_btns:
 							hour = time_btn.text
 							# store all timeslotes
 							print("Found an open slot (day, month, hour): " + str(date) + ", " + str(month) + ", " + str(hour))
-							open_timeslots = open_timeslots.append({'Location':location, 'Day':date, 'Month':month, 'Time':hour}, ignore_index=True)
+							open_timeslots_data.append({'Location':location, 'Day':date, 'Month':month, 'Time':hour})
 						# scroll to the top
-						date_btn_1 = driver.find_element_by_xpath('//*[@title='+str(1)+']')
+						date_btn_1 = driver.find_element(By.XPATH, '//*[@title='+str(1)+']')
 						time.sleep(1)						
 						driver.execute_script("arguments[0].scrollIntoView(true);", date_btn_1)
 						time.sleep(2)						
 				# check next month
 				time.sleep(1)
-				continue_btn2 = driver.find_element_by_xpath('//*[@id="booking-location"]/div/div/form/div[2]/div[2]/button/span')						
+				continue_btn2 = driver.find_element(By.XPATH, '//*[@id="booking-location"]/div/div/form/div[2]/div[2]/button/span')						
 				driver.execute_script("arguments[0].scrollIntoView(true);", continue_btn2)					
 				nextMonth_btn = wait.until(EC.element_to_be_clickable((By.XPATH,'//*[@title="next month"]')))	
 				nextMonth_btn.click()
@@ -173,10 +175,11 @@ class testCase(object):
 			driver.execute_script("window.scrollTo(0, -100)") 							
 
 		# store all open timeslots into a csv file
+		open_timeslots = pd.DataFrame(open_timeslots_data)
 		open_timeslots.to_csv('./open_timeslots.csv', index=False)
 
 		# quit drivetest.ca booking page
-		quit_btn = driver.find_element_by_xpath('//*[@title="Quit"]')
+		quit_btn = driver.find_element(By.XPATH, '//*[@title="Quit"]')
 		quit_btn.click()
 
 		# close the chrome driver window
@@ -185,4 +188,3 @@ class testCase(object):
 		# send an email with the list of open timeslots attached
 		if self.sendEmail:
 			self.sendEmail()
-	
