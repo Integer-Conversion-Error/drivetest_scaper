@@ -1,10 +1,10 @@
-from selenium import webdriver 
-from selenium.webdriver.chrome.options import Options
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.common.action_chains import ActionChains
 
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
@@ -15,7 +15,8 @@ import time
 import calendar
 import yagmail
 import datetime
-
+import random
+import os
 
 class testCase(object):
 	"""A drivetest test case"""
@@ -29,9 +30,16 @@ class testCase(object):
 		self.location         = self.locations_gta
 		self.headless         = False
 		self.incognito        = False
-		self.write			  = False
-		self.verify           = False
 		self.sendEmail        = True
+		self.test_html_dir    = None
+
+	def _save_page_source(self, driver, file_path):
+		"""Saves the page source to a file."""
+		try:
+			with open(file_path, 'w', encoding='utf-8') as f:
+				f.write(driver.page_source)
+		except Exception as e:
+			print(f"Error saving page source to {file_path}: {e}")
 
 	def sendEmail(self):
 		print("Sending Email.......")
@@ -58,133 +66,148 @@ class testCase(object):
 		print("Sending Email.......DONE")
 
 	def bookARoadTest(self):
+		# Create a timestamped directory for the test run
+		timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+		self.test_html_dir = os.path.join("test_html", timestamp)
+		os.makedirs(self.test_html_dir, exist_ok=True)
 
-		self.url = "https://drivetest.ca/book-a-road-test/booking.html#/validate-driver-email"
-		if self.verify==True:
-			self.url = "https://drivetest.ca/book-a-road-test/booking.html#/verify-driver"
+		self.url = "https://drivetest.ca/dtbookingngapp/registration/signup"
 
-		# chrome Options
-		options = Options()
-		options.add_argument("--window-size=1420,1080")
-		options.add_experimental_option("detach", True) # keep window open after the method is done	
-		if self.headless==True:
-			options.add_argument("--headless")
-		if self.incognito==True:
-			options.add_argument("--incognito")		
-
-		driver = webdriver.Chrome(options=options)
+		# Let undetected-chromedriver handle the options
+		driver = uc.Chrome()
 		driver.get(self.url)
+		self._save_page_source(driver, os.path.join(self.test_html_dir, "01_signup_page.html"))
+		time.sleep(random.uniform(2, 4))
 
 		# wait maximum 10 seconds for elements
-		ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)		
+		ignored_exceptions = (NoSuchElementException, StaleElementReferenceException,)
 		wait = WebDriverWait(driver, 10, ignored_exceptions=ignored_exceptions)
-		
+		actions = ActionChains(driver)
 
-		### filling the forms ###
-		licNum = wait.until(EC.element_to_be_clickable((By.ID, 'licenceNumber')))		
-		licExpDate = wait.until(EC.element_to_be_clickable((By.ID, 'licenceExpiryDate')))
-		licNum.send_keys(self.licenceNumber)
-		licExpDate.send_keys(self.expiryDate)
-		# if we are ooking for the first time and not editing existing one	
-		if self.verify==False:
-			emailAddress = wait.until(EC.element_to_be_clickable((By.ID, 'emailAddress')))		
-			confirmEmailAddress = wait.until(EC.element_to_be_clickable((By.ID, 'confirmEmailAddress')))		
-			emailAddress.send_keys(self.emailAddress)
-			confirmEmailAddress.send_keys(self.emailAddress)
+		# Sign in
+		time.sleep(random.uniform(2, 4))
+		wait.until(EC.element_to_be_clickable((By.LINK_TEXT, 'Sign in'))).click()
+		self._save_page_source(driver, os.path.join(self.test_html_dir, "02_confirm_registration_page.html"))
+		time.sleep(random.uniform(2, 4))
 
+		# Enter credentials
+		time.sleep(random.uniform(1, 2))
+		wait.until(EC.element_to_be_clickable((By.ID, 'driverLicenceNumber'))).send_keys(self.licenceNumber)
+		time.sleep(random.uniform(0.5, 1.5))
+		wait.until(EC.element_to_be_clickable((By.ID, 'driverLicenceExpiry'))).send_keys(self.expiryDate)
+		time.sleep(random.uniform(0.5, 1.5))
+		submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "Submit")]')))
+		driver.execute_script("arguments[0].click();", submit_button)
+		self._save_page_source(driver, os.path.join(self.test_html_dir, "03_view_bookings_page.html"))
+		time.sleep(random.uniform(3, 5))
 
-		time.sleep(4)						
-		regSubmitBtn =wait.until(EC.element_to_be_clickable((By.ID, 'regSubmitBtn')))
-		regSubmitBtn.click()
+		# Book a new road test
+		time.sleep(random.uniform(2, 4))
+		book_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "Book a New Road Test")]')))
+		driver.execute_script("arguments[0].click();", book_button)
+		self._save_page_source(driver, os.path.join(self.test_html_dir, "04_select_licence_class_page.html"))
+		time.sleep(random.uniform(3, 5))
 
-		if self.verify==True:
-			reschedule_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="8488627"]/div/div/div[2]/div/span[2]/button')))
-			reschedule_btn.click()
-			reschedule2_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="page_book_a_road_test_booking"]/div[4]/div/div/div/div/div/div[4]/button[1]')))
-			reschedule2_btn.click()
+		# Select license class
+		time.sleep(random.uniform(1, 3))
+		if self.testType == 'G2':
+			wait.until(EC.element_to_be_clickable((By.XPATH, '//label[@for="licence_class_G2"]'))).click()
+		elif self.testType == 'G':
+			wait.until(EC.element_to_be_clickable((By.XPATH, '//label[@for="licence_class_G"]'))).click()
+		time.sleep(random.uniform(0.5, 1.5))
+		continue_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "CONTINUE")]')))
+		driver.execute_script("arguments[0].click();", continue_button)
+		self._save_page_source(driver, os.path.join(self.test_html_dir, "05_drivetest_locations_page.html"))
+		time.sleep(random.uniform(3, 5))
 
-		else:
-			if self.testType == 'G2':
-				wait.until(EC.element_to_be_clickable((By.ID, 'G2btn'))).click()
-			elif self.testType == 'G':
-				wait.until(EC.element_to_be_clickable((By.ID, 'Gbtn'))).click()
-			continue_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="booking-licence"]/div/form/div/div[4]/button')))
-			continue_btn.click()
-		
 		open_timeslots_data = []
 
-		# select 1 location
+		# Select locations
+		locations_dir = os.path.join(self.test_html_dir, "Locations")
+		os.makedirs(locations_dir, exist_ok=True)
 		for location in self.location:
+			print(f"Searching in location: {location}")
+			location_dir = os.path.join(locations_dir, location)
+			os.makedirs(location_dir, exist_ok=True)
+			try:
+				time.sleep(random.uniform(2, 4))
+				# Use a more precise XPath to match the exact location name
+				location_btn = wait.until(EC.presence_of_element_located((By.XPATH, f'//button[.//span[@class="locationName" and normalize-space()="{location}"]]')))
+				actions.double_click(location_btn).perform()
+				time.sleep(random.uniform(3, 5)) # Wait for page to load
 
-			print("Searching in location: "+str(location))
-			# Select the location
-			location_btn = wait.until(EC.element_to_be_clickable((By.XPATH,'//*[@title=\"'+str(location)+'\"]')))
-			time.sleep(1)					
-			location_btn.click()
-			print("location clicked")
+				# Scrape calendar
+				current_year = datetime.datetime.now().year
+				for month in self.months:
+					month_abbr = month[:3]
+					month_number = list(calendar.month_abbr).index(month_abbr)
+					month_dir = os.path.join(location_dir, month)
+					os.makedirs(month_dir, exist_ok=True)
+					
+					# Navigate to the correct month
+					while True:
+						month_year_text = wait.until(EC.presence_of_element_located((By.ID, 'calendarMonthDiv'))).text
+						displayed_month = month_year_text.split(' ')[0]
+						if month.upper() == displayed_month.upper():
+							self._save_page_source(driver, os.path.join(location_dir, f"{month}.html"))
+							break
+						wait.until(EC.element_to_be_clickable((By.XPATH, '//button[@aria-labelledby="next-label"]'))).click()
+						time.sleep(random.uniform(0.5, 1.5)) # Brief pause for calendar to update
 
-			continue_btn2 = driver.find_element(By.XPATH, '//*[@id="booking-location"]/div/div/form/div[2]/div[2]/button')
-			driver.execute_script("arguments[0].scrollIntoView();", continue_btn2)			
-			time.sleep(1)
-			# clicking continue is only needed for the first location
-			if location==self.location[0]:
-				continue_btn2.click()
-				print("continue_btn2 clicked")
-			time.sleep(2)		
-
-			year = datetime.datetime.now().year
-			for month in self.months:
-				# for desired dates, look into availability and save date and time
-				datetime_object = datetime.datetime.strptime(month, "%b")
-				month_number = datetime_object.month
-				dates_in_a_month = calendar.monthrange(year, month_number)[1]
-				dates = np.arange(1,dates_in_a_month)
-
-				for date in dates:
-					print("date = "+str(date))
-					# date_btn = driver.find_element_by_xpath('//*[@title='+str(date)+']')
-					date_btn = wait.until(EC.element_to_be_clickable((By.XPATH,'//*[@title='+str(date)+']'))) 
-					if (date_btn.get_attribute('tabindex') == "0" and self.write==True): # active date slot for selecting has tabindex=0
+					# Find available dates
+					available_dates_count = len(driver.find_elements(By.XPATH, '//button[contains(@class, "date-available")]'))
+					for i in range(available_dates_count):
+						# Re-find the elements on each iteration to avoid stale references
+						available_dates = driver.find_elements(By.XPATH, '//button[contains(@class, "date-available")]')
+						date_btn = available_dates[i]
+						
+						day = int(date_btn.text)
 						date_btn.click()
-						# Continue
-						continue_btn3 = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="calendarSubmit"]/button')))
-						continue_btn3.click()
-						# select available dates
-						time.sleep(3)
-						time_btns = driver.find_elements(By.XPATH, '//label[starts-with(@id,"btn")]')
+						time.sleep(random.uniform(2, 4))
+						calendar_continue_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "CONTINUE")]')))
+						driver.execute_script("arguments[0].click();", calendar_continue_button)
+						
+						# Scrape times
+						self._save_page_source(driver, os.path.join(month_dir, f"{day}.html"))
+						time.sleep(random.uniform(2, 4)) # Wait for times to load
+						time_btns = driver.find_elements(By.XPATH, '//button[contains(@class, "widget")]')
 						for time_btn in time_btns:
 							hour = time_btn.text
-							# store all timeslotes
-							print("Found an open slot (day, month, hour): " + str(date) + ", " + str(month) + ", " + str(hour))
-							open_timeslots_data.append({'Location':location, 'Day':date, 'Month':month, 'Time':hour})
-						# scroll to the top
-						date_btn_1 = driver.find_element(By.XPATH, '//*[@title='+str(1)+']')
-						time.sleep(1)						
-						driver.execute_script("arguments[0].scrollIntoView(true);", date_btn_1)
-						time.sleep(2)						
-				# check next month
-				time.sleep(1)
-				continue_btn2 = driver.find_element(By.XPATH, '//*[@id="booking-location"]/div/div/form/div[2]/div[2]/button/span')						
-				driver.execute_script("arguments[0].scrollIntoView(true);", continue_btn2)					
-				nextMonth_btn = wait.until(EC.element_to_be_clickable((By.XPATH,'//*[@title="next month"]')))	
-				nextMonth_btn.click()
+							full_date = f"{current_year}-{month_number:02d}-{day:02d} {hour}"
+							print(f"Found an open slot: {location}, {full_date}")
+							open_timeslots_data.append({'Location': location, 'DateTime': pd.to_datetime(full_date)})
+						
+						driver.back()
+						time.sleep(random.uniform(2, 4))
+						wait.until(EC.presence_of_element_located((By.ID, 'calendarMonthDiv'))) # Wait for calendar to be back
 
-				# wait till first date of preivoius month is staled
-				wait.until(EC.staleness_of(date_btn))
+			except Exception as e:
+				print(f"Could not process location {location}: {e}")
+			
+			# Go back to location selection
+			driver.get("https://drivetest.ca/dtbookingngapp/driveTestLocations")
+			time.sleep(random.uniform(2, 4))
 
-			driver.execute_script("window.scrollTo(0, -100)") 							
 
-		# store all open timeslots into a csv file
-		open_timeslots = pd.DataFrame(open_timeslots_data)
-		open_timeslots.to_csv('./open_timeslots.csv', index=False)
+		# Process results
+		if open_timeslots_data:
+			open_timeslots = pd.DataFrame(open_timeslots_data)
+			open_timeslots.sort_values(by='DateTime', inplace=True)
+			open_timeslots['DateTime'] = open_timeslots['DateTime'].dt.strftime('%Y-%m-%d %I:%M %p')
+			open_timeslots.to_csv('./open_timeslots.csv', index=False)
 
-		# quit drivetest.ca booking page
-		quit_btn = driver.find_element(By.XPATH, '//*[@title="Quit"]')
-		quit_btn.click()
+			print("\n--- All Available Bookings ---")
+			print(open_timeslots)
+
+			print("\n--- Soonest Available Bookings ---")
+			print(open_timeslots.head(3))
+
+			if self.sendEmail:
+				self.sendEmail()
+		else:
+			print("No open timeslots found.")
+			
+		print(f"\nSearch completed at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 		# close the chrome driver window
 		driver.quit()
-
-		# send an email with the list of open timeslots attached
-		if self.sendEmail:
-			self.sendEmail()
